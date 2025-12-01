@@ -1,6 +1,8 @@
 import asyncio
+from typing import List
 import time
 
+from batch_data_types.api_types import ApiBatchTask, ApiRequestTask, ApiRequestParams
 from network.httpx_client import HttpxClient
 
 
@@ -11,72 +13,60 @@ class SendTaskUtil:
         - 可以指定每次请求的间隔时间，防止请求过快被限流
     '''
 
-    async def send_start(
-            self,
-            # 请求参数列表，里面有：{url, method, params, data, headers, format_res, timeout}
-            origin_batch_list=[],
-            # 并发数
-            concurrency=1,
-            # 每次请求间隔时间，单位秒
-            sleep_time=2,
-            # 请求到一定次数，触发一次回调函数
-            callback_trigger_count=0,
-            # 请求全部结束后的回调函数
-            all_complete_callback=None,
-    ):
+    async def send_start(self, api_batch_task: ApiBatchTask):
+        concurrency = api_batch_task.concurrency
+
         # 判断请求参数列表是否为空
-        if not origin_batch_list:
+        if not api_batch_task.origin_batch_list:
             print("请求参数列表为空，无法发送请求")
             return []
 
-        chunks = origin_batch_list.copy()
-        if concurrency > 0:
-            # 将request_params_list分割为多个子列表，每个子列表长度为concurrency
-            chunks = [
-                origin_batch_list[i:i + concurrency]
-                for i in range(0, len(origin_batch_list), concurrency)
-            ]
+        # 并发数切片
+        api_request_task_list_list: List[List[ApiRequestTask]] = [
+            api_batch_task.origin_batch_list[i:i + concurrency]
+            for i in range(0, len(api_batch_task.origin_batch_list), concurrency)
+        ]
 
-        # 总请求数
-        total_count = len(chunks)
+        # 切片后的请求总数
+        total_count = len(api_request_task_list_list)
         # 已完成请求数
         completed_count = 0
-        # 返回结果列表
-        result_list = []
 
-        for chunk in chunks:
+        for api_request_task_list in api_request_task_list_list:
+            api_request_task_list: List[ApiRequestTask] = api_request_task_list
             print(f"开始处理第 {completed_count} / {total_count - 1} 批次请求...")
-            # chunk转为taskItem列表
-            task_item_list = [HttpxClient().get_task_item(**c) for c in chunk]
+
             # 构建协程列表并执行
-            httpx_list = [HttpxClient().get_http_task(task_item=task_item) for task_item in task_item_list]
+            httpx_list = [
+                HttpxClient().create_http_task(api_request_task=api_request_task)
+                for api_request_task in api_request_task_list
+            ]
             # 并发执行当前chunk的请求
-            responses = await asyncio.gather(*httpx_list)
+            res_list = await asyncio.gather(*httpx_list)
+
             # 处理响应结果
-            format_responses = []
-            for i, resp in enumerate(responses):
-                format_res_fn = chunk[i].get("format_res_fn", None)
-                if format_res_fn and callable(format_res_fn):
-                    format_responses.append(format_res_fn(result=resp, task_item=task_item_list[i]))
-                else:
-                    format_responses.append(resp)
+            for i, res in enumerate(res_list):
+                curr_task: ApiRequestTask = api_request_task_list[i]
+                curr_task.res = res
+                # 执行后处理函数
+                if curr_task.format_res_fn:
+                    curr_task.format_res_fn(curr_task)
 
             completed_count += 1
 
-            # 累计结果
-            result_list.extend(format_responses)
-
             # 请求结束后触发回调函数
+            all_complete_callback = api_batch_task.all_complete_callback
             if completed_count == total_count:
                 if all_complete_callback:
-                    all_complete_callback(result_list=result_list)
+                    all_complete_callback(api_request_task_list_list)
                     return
 
             # 如果不是最后一批次，且设置了触发回调函数的请求次数
+            callback_trigger_count = api_batch_task.callback_trigger_count
             if callback_trigger_count > 0 and completed_count >= callback_trigger_count and completed_count % callback_trigger_count == 0:
                 if all_complete_callback:
-                    all_complete_callback(result_list=result_list)
+                    all_complete_callback(api_request_task_list_list)
 
             # 每次请求后休眠指定时间
-            if sleep_time > 0:
-                time.sleep(sleep_time)
+            if api_batch_task.sleep_time > 0:
+                time.sleep(api_batch_task.sleep_time)
