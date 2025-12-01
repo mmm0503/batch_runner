@@ -1,4 +1,5 @@
 import asyncio
+import time
 
 from network.httpx_client import HttpxClient
 
@@ -29,7 +30,7 @@ class SendTaskUtil:
             return []
 
         chunks = origin_batch_list.copy()
-        if concurrency > 1:
+        if concurrency > 0:
             # 将request_params_list分割为多个子列表，每个子列表长度为concurrency
             chunks = [
                 origin_batch_list[i:i + concurrency]
@@ -44,51 +45,38 @@ class SendTaskUtil:
         result_list = []
 
         for chunk in chunks:
+            print(f"开始处理第 {completed_count} / {total_count - 1} 批次请求...")
             # chunk转为taskItem列表
-            result_chunk = [
-                HttpxClient().get_task_item(
-                    url=item.get("url", ""),
-                    methods=item.get("method", "GET"),
-                    params=item.get("params", None),
-                    data=item.get("data", None),
-                    headers=item.get("headers", None),
-                    format_res_fn=item.get("format_res_fn", None),
-                    timeout=item.get("timeout", None)
-                ) for item in chunk
-            ]
+            task_item_list = [HttpxClient().get_task_item(**c) for c in chunk]
             # 构建协程列表并执行
-            result_chunk = [
-                HttpxClient().get_http_task(
-                    url=item["taskParam"]["url"],
-                    methods=item["taskParam"]["methods"],
-                    params=item["taskParam"]["params"],
-                    data=item["taskParam"]["data"],
-                    headers=item["taskParam"]["headers"],
-                    format_res_fn=item["taskParam"]["format_res_fn"],
-                    timeout=item["taskParam"]["timeout"]
-                ) for item in result_chunk
-            ]
+            httpx_list = [HttpxClient().get_http_task(task_item=task_item) for task_item in task_item_list]
             # 并发执行当前chunk的请求
-            responses = await asyncio.gather(*result_chunk)
+            responses = await asyncio.gather(*httpx_list)
+            # 处理响应结果
+            format_responses = []
+            for i, resp in enumerate(responses):
+                format_res_fn = chunk[i].get("format_res_fn", None)
+                if format_res_fn and callable(format_res_fn):
+                    format_responses.append(format_res_fn(result=resp, task_item=task_item_list[i]))
+                else:
+                    format_responses.append(resp)
 
             completed_count += 1
 
+            # 累计结果
+            result_list.extend(format_responses)
+
+            # 请求结束后触发回调函数
+            if completed_count == total_count:
+                if all_complete_callback:
+                    all_complete_callback(result_list=result_list)
+                    return
+
+            # 如果不是最后一批次，且设置了触发回调函数的请求次数
+            if callback_trigger_count > 0 and completed_count >= callback_trigger_count and completed_count % callback_trigger_count == 0:
+                if all_complete_callback:
+                    all_complete_callback(result_list=result_list)
+
             # 每次请求后休眠指定时间
             if sleep_time > 0:
-                import time
                 time.sleep(sleep_time)
-
-            # 触发部分完成回调函数
-            if callback_trigger_count > 0 and completed_count % callback_trigger_count == 0:
-                if all_complete_callback:
-                    all_complete_callback(partial=True, completed_count=completed_count, total_count=total_count)
-
-# async def fetch_all(objects):
-#     async with httpx.AsyncClient() as client:
-#         # 构造任务列表
-#         tasks = [client.get(obj['url']) for obj in objects]
-#         # 按顺序等待所有结果
-#         responses = await asyncio.gather(*tasks)
-#         # 如果你想要响应的文本结果，可以这样处理
-#         result = [resp.text for resp in responses]
-#         return result
