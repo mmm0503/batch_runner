@@ -1,9 +1,15 @@
 import asyncio
 from typing import List
 import time
+from itertools import chain
 
 from batch_data_types.api_types import ApiBatchTask, ApiRequestTask, ApiRequestParams
 from network.httpx_client import HttpxClient
+
+
+# 扁平化二维列表
+def flatten_api_request_task_list(task_list):
+    return list(chain.from_iterable(task_list))
 
 
 class SendTaskUtil:
@@ -58,14 +64,14 @@ class SendTaskUtil:
             all_complete_callback = api_batch_task.all_complete_callback
             if completed_count == total_count:
                 if all_complete_callback:
-                    all_complete_callback(api_request_task_list_list)
+                    all_complete_callback(flatten_api_request_task_list(api_request_task_list_list))
                     return
 
             # 如果不是最后一批次，且设置了触发回调函数的请求次数
             callback_trigger_count = api_batch_task.callback_trigger_count
             if callback_trigger_count > 0 and completed_count >= callback_trigger_count and completed_count % callback_trigger_count == 0:
                 if all_complete_callback:
-                    all_complete_callback(api_request_task_list_list)
+                    all_complete_callback(flatten_api_request_task_list(api_request_task_list_list))
 
             # 每次请求后休眠指定时间
             if api_batch_task.sleep_time > 0:

@@ -19,9 +19,20 @@ class HttpxClient:
         methods = api_request_task.api_param.methods.upper()
         try:
             if methods == "GET":
-                return await api_client.get(**api_request_task.api_param)
+                return await api_client.get(
+                    url=api_request_task.api_param.full_url,
+                    params=api_request_task.api_param.params,
+                    headers=api_request_task.api_param.headers,
+                    timeout=api_request_task.api_param.timeout
+                )
             elif methods == "POST":
-                return await api_client.post(**api_request_task.api_param)
+                return await api_client.post(
+                    url=api_request_task.api_param.full_url,
+                    params=api_request_task.api_param.params,
+                    headers=api_request_task.api_param.headers,
+                    json=api_request_task.api_param.data,
+                    timeout=api_request_task.api_param.timeout
+                )
             else:
                 raise ValueError(f"找不到方法类型: {methods}")
         except BaseException as e:

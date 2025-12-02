@@ -1,9 +1,8 @@
 from dataclasses import dataclass
 from typing import Optional, Any, Callable
 
-from pydantic.v1.dataclasses import Dataclass
 
-
+# api_request_params
 @dataclass
 class ApiRequestParams:
     full_url: str
@@ -14,6 +13,7 @@ class ApiRequestParams:
     timeout: Optional[float] = 10.0
 
 
+# api_request_task
 @dataclass
 class ApiRequestTask:
     api_param: ApiRequestParams  # 请求参数
@@ -27,7 +27,8 @@ class ApiRequestTask:
 
 
 # 批量请求任务的 入参类型
-@Dataclass
+# api_batch_task
+@dataclass
 class ApiBatchTask:
     origin_batch_list: list[ApiRequestTask]  # 请求类型列表
     concurrency: int = 1  # 并发数
