@@ -31,6 +31,7 @@ class HttpxClient:
                     params=api_request_task.api_param.params,
                     headers=api_request_task.api_param.headers,
                     json=api_request_task.api_param.data,
+                    data=api_request_task.api_param.data,
                     timeout=api_request_task.api_param.timeout
                 )
             else:

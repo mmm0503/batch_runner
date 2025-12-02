@@ -2,20 +2,19 @@ from dataclasses import dataclass
 from typing import Optional, Any, Callable
 
 
-# api_request_params
 @dataclass
-class ApiRequestParams:
+class ApiRequestParams:  # api_request_params
     full_url: str
     methods: str
     params: Optional[Any] = None
     headers: Optional[Any] = None
     data: Optional[Any] = None
+    json: Optional[Any] = None
     timeout: Optional[float] = 10.0
 
 
-# api_request_task
 @dataclass
-class ApiRequestTask:
+class ApiRequestTask:  # api_request_task
     api_param: ApiRequestParams  # 请求参数
     origin_data: Optional[Any]  # 原始数据
     res: Optional[Any] = None  # 请求结果
@@ -27,9 +26,8 @@ class ApiRequestTask:
 
 
 # 批量请求任务的 入参类型
-# api_batch_task
 @dataclass
-class ApiBatchTask:
+class ApiBatchTask:  # api_batch_task
     origin_batch_list: list[ApiRequestTask]  # 请求类型列表
     concurrency: int = 1  # 并发数
     sleep_time: float = 2.0  # 每次请求间隔时间，单位秒
