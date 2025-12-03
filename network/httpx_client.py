@@ -26,6 +26,10 @@ class HttpxClient:
                     timeout=api_request_task.api_param.timeout
                 )
             elif methods == "POST":
+                # json 和 data 只能传一个,否则会报错
+                if api_request_task.api_param.data and api_request_task.api_param.json:
+                    raise ValueError("POST请求中，json和data参数只能传一个")
+
                 return await api_client.post(
                     url=api_request_task.api_param.full_url,
                     params=api_request_task.api_param.params,
@@ -36,6 +40,6 @@ class HttpxClient:
                 )
             else:
                 raise ValueError(f"找不到方法类型: {methods}")
-        except BaseException as e:
+        except Exception as e:
             print("HTTP请求异常：", e)
             return None

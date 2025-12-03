@@ -28,7 +28,7 @@ origin_batch_list: List[ApiRequestTask] = [
         api_param=ApiRequestParams(
             full_url=f"http://localhost:8000/test/test1",
             methods="GET",
-            params={"name": f"user{i}"}
+            params={"token": f"user{i}"}
         ),
         format_res_fn=format_res_fn
     )
