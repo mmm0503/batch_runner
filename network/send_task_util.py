@@ -19,6 +19,7 @@ class SendTaskUtil:
         - 可以指定每次请求的间隔时间，防止请求过快被限流
     '''
 
+    @staticmethod
     async def send_start(self, api_batch_task: ApiBatchTask):
         concurrency = api_batch_task.concurrency
 
@@ -44,7 +45,7 @@ class SendTaskUtil:
 
             # 构建协程列表并执行
             httpx_list = [
-                HttpxClient().create_http_task(api_request_task=api_request_task)
+                HttpxClient.create_http_task(api_request_task=api_request_task)
                 for api_request_task in api_request_task_list
             ]
             # 并发执行当前chunk的请求

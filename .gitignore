@@ -1,2 +1,7 @@
 work_dir/
 .idea/
+.vscode/
+node_modules/
+dist/
+
+*.log

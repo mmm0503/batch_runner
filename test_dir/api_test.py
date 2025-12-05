@@ -36,7 +36,7 @@ origin_batch_list: List[ApiRequestTask] = [
 ]
 
 asyncio.run(
-    SendTaskUtil().send_start(
+    SendTaskUtil.send_start(
         ApiBatchTask(
             origin_batch_list=origin_batch_list,
             concurrency=2,  # 并发数
