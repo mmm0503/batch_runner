@@ -1,9 +1,0 @@
-{
-    "name": "Alice",
-    "age": 30,
-    "city": "New York",
-    "data": {
-        "a": "123",
-        "b": 2
-    }
-}
