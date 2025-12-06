@@ -40,7 +40,8 @@ class HttpxClient:
                     data=api_request_task.api_param.data,
                     timeout=api_request_task.api_param.timeout
                 )
-
+            end_time = time.time()
+            api_request_task.time_cost = end_time - start_time
             return res
         except Exception as e:
             print("HTTP请求异常：", e)
