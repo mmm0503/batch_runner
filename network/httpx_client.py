@@ -43,9 +43,13 @@ class HttpxClient:
                     )
             end_time = time.time()
             api_request_task.time_cost = end_time - start_time  # 计算接口总耗时
+            # 判断接口请求是否成功
+            if res is not None and res.status_code == 200:
+                api_request_task.http_is_success = True
+            else:
+                api_request_task.http_is_success = False
+                api_request_task.error_message = f"HTTP状态码异常：{res.status_code if res else '无响应'}"
             api_request_task.res = res
-            # 执行后处理函数
-            if api_request_task.format_res_fn:
-                api_request_task.format_res_fn(api_request_task)
+
         except Exception as e:
             print("HTTP请求异常：", e)

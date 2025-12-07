@@ -19,13 +19,13 @@ class SendTaskUtil:
     @staticmethod
     async def send_start(api_batch_task: ApiBatchTask):
         # 判断请求参数列表是否为空
-        if not api_batch_task.origin_batch_list:
+        if not api_batch_task.api_request_task_list:
             print("请求参数列表为空，直接返回")
             return []
 
         # 并发数切片
         api_request_task_list_list: List[List[ApiRequestTask]] = list(
-            chunked(api_batch_task.origin_batch_list, api_batch_task.concurrency)
+            chunked(api_batch_task.api_request_task_list, api_batch_task.concurrency)
         )
 
         # 切片后的请求总数
