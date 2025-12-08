@@ -17,20 +17,17 @@ class ApiRequestParams:  # api_request_params
 class ApiRequestTask:  # api_request_task
     api_param: ApiRequestParams  # 请求参数
     origin_data: Optional[Any]  # 原始数据
-    http_is_success: bool = False  # 接口请求是否成功
+
     time_cost: Optional[float] = None  # 请求耗时
     res: Optional[Any] = None  # 请求结果
-    error_message: Optional[str] = None  # 错误信息
 
     format_data: Optional[Any] = None  # 格式化后的结果
-    format_data_is_success: bool = False  # 格式化后，判断res是符合预期
+    format_data_is_success: bool = None  # 格式化后，判断res是符合预期
 
-
-# 批量请求任务的 入参类型
-@dataclass
-class ApiBatchTask:  # api_batch_task
-    api_request_task_list: list[ApiRequestTask]  # 请求类型列表
-    concurrency: int = 1  # 并发数
-    sleep_time: float = 2.0  # 每次请求间隔时间，单位秒
-    callback_trigger_count: int = 0  # 请求到一定次数，触发一次回调函数
-    complete_callback: Optional[Callable] = None
+# # 批量请求任务的 入参类型
+# @dataclass
+# class ApiBatchTask:  # api_batch_task
+#     api_request_task_list: list[ApiRequestTask]  # 请求类型列表
+#     concurrency: int = 1  # 并发数
+#     sleep_time: int = 2.0  # 每次请求间隔时间，单位秒
+#     complete_callback: Optional[Callable] = None
