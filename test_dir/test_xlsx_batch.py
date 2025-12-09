@@ -4,7 +4,7 @@ from batch_data_types.api_types import ApiRequestParams, ApiRequestTask
 from batch_jobs.xlsx_http_batch_handler import XlsxHttpBatchHandler
 
 
-def create_api_task_params_fn(row: list, header_row: list) -> ApiRequestParams:
+def create_api_task_params_fn(data_row: list, header_row: list) -> ApiRequestParams:
     '''根据xlsx行数据，创建ApiRequestParams'''
     quota_type_dict = {
         "个股": "STOCK",
@@ -14,8 +14,8 @@ def create_api_task_params_fn(row: list, header_row: list) -> ApiRequestParams:
         full_url="http://localhost:8000/test/batchTest",
         methods="POST",
         json={
-            "quotaName": row[1],
-            "quotaType": quota_type_dict[row[2]] or "",
+            "quotaName": data_row[1],
+            "quotaType": quota_type_dict[data_row[2]] or "",
         },
         headers={
             "Content-Type": "application/json"

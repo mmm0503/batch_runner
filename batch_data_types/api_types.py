@@ -24,6 +24,12 @@ class ApiRequestTask:  # api_request_task
     format_data: Optional[Any] = None  # 格式化后的结果
     format_data_is_success: bool = None  # 格式化后，判断res是符合预期
 
+    def __getitem__(self, key):
+        try:
+            return getattr(self, key)
+        except AttributeError:
+            raise KeyError(key)
+
 # # 批量请求任务的 入参类型
 # @dataclass
 # class ApiBatchTask:  # api_batch_task
