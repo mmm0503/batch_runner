@@ -28,6 +28,8 @@ class HttpxHandler:
             - time_cost: 请求耗时
         '''
         try:
+            if api_request_task.task_is_success:
+                return  # 如果任务已经成功，则不再发送请求
             res = None
             start_time = time.time()
             methods = api_request_task.api_param.methods.upper()

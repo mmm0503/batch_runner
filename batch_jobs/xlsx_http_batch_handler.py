@@ -44,10 +44,14 @@ class XlsxHttpBatchHandler:
     # 要追加的结果列
     __append_header: list[AppendHeaderType] = [
         {"label": "跑批请求耗时（秒）", "key": "time_cost"},
+        {"label": "跑批是否成功", "key": "task_is_success"},
         {"label": "跑批结果是否符合预期", "key": "format_data_is_success"},
         {"label": "跑批响应格式化后结果", "key": "format_data"},
         {"label": "跑批响应原始结果", "key": "res"},
     ]
+
+    __xlsx_header_row_list = []
+    __xlsx_content_row_list = []
 
     def __init__(self,
                  # xlsx文件路径
@@ -86,21 +90,19 @@ class XlsxHttpBatchHandler:
         '''开始跑批'''
 
         # 1: 读取xlsx文件，获取原始数据列表
-        xlsx_header_row_list, xlsx_content_row_list = self.__reader_xlsx_data()
+        self.__reader_xlsx_data()
 
         # 2: 请求前处理
         # 追加 标题列
-        self._format_result_to_header(xlsx_header_row_list)
+        self._format_result_to_header()
+
         # 构建请求任务列表
-        api_request_task_list: list[ApiRequestTask] = self._get_api_request_task_list(
-            xlsx_header_row_list=xlsx_header_row_list,
-            xlsx_content_row_list=xlsx_content_row_list
-        )
+        api_request_task_list = self._get_api_request_task_list()
 
         # 并发切片列表
         task_chunk_list = list(chunked(api_request_task_list, self.__concurrency))
         # 并发切片content
-        content_chunk_list = list(chunked(xlsx_content_row_list, self.__concurrency))
+        content_chunk_list = list(chunked(self.__xlsx_content_row_list, self.__concurrency))
         # 切片后的请求总数
         total_count = len(task_chunk_list)
 
@@ -112,30 +114,12 @@ class XlsxHttpBatchHandler:
             await httpx_handler.async_send_api_task_list(task_chunk)
 
             # 4: 请求后处理
-            # 格式化接口返回结果
-            list(map(self.__format_res_fn, task_chunk))
-            # 追加 结果列
-            # 当前正在跑的索引
-            self._format_result_to_content(
-                xlsx_header_row_list,
-                content_chunk_list[task_chunk_index],
-                task_chunk
-            )
+            for task_index, task in enumerate(task_chunk):
+                row_data = content_chunk_list[task_chunk_index][task_index]
+                self.post_processing_task(task=task, row_data=row_data)
 
-            # 设置xlsx内容
-            self.__xlsx_file_handler.set_content(content_list=[
-                *xlsx_header_row_list,
-                *xlsx_content_row_list
-            ])
-
-            # 格式化xlsx结果单元格颜色
-            self.__xlsx_file_handler.format_sheet_cel_success(xlsx_format_options=[
-                XlsxFormatCelSuccessOption(
-                    format_key_name="跑批结果是否符合预期",
-                    is_success_fn=lambda cell_value: cell_value is True,
-                    start_index=self.__content_row_start_index + 1
-                )
-            ])
+            # 5 xlsx处理
+            self.post_processing_xlsx()
 
             # 5: 每跑一次，保存一次
             self.__xlsx_file_handler.write_handle(self.__write_file_path)
@@ -146,18 +130,65 @@ class XlsxHttpBatchHandler:
             print(f"并发量：{self.__concurrency}, 第 {task_chunk_index} / {total_count - 1} 批次请求处理完....")
 
         print("跑批结束")
+        self.show_success_rate()
 
-    def _get_api_request_task_list(self, xlsx_header_row_list: list, xlsx_content_row_list: list) -> list[
-        ApiRequestTask]:
+    # 计算成功率
+    def show_success_rate(self):
+        # 总行数
+        total_rows = len(self.__xlsx_content_row_list)
+        # 成功行数
+        success_rows = 0
+        for row_data in self.__xlsx_content_row_list:
+            is_success = self.get_cell_value_by_header_name(row_data=row_data, header_name="跑批是否成功", )
+            if is_success:
+                success_rows += 1
+        success_rate = (success_rows / total_rows) * 100 if total_rows > 0 else 0
+        print(f"成功行数: {success_rows}/{total_rows}, 成功率: {success_rate:.2f}%")
+
+    def post_processing_task(self, task: ApiRequestTask, row_data: list):
+        '''请求后处理任务'''
+        # 如果任务已经成功，跳过格式化
+        if task.task_is_success:
+            return
+
+        # 格式化接口返回结果
+        self.__format_res_fn(task)
+
+        # 追加 结果列
+        self._format_result_to_content(task=task, row_data=row_data)
+
+    def post_processing_xlsx(self):
+        # 设置xlsx内容
+        self.__xlsx_file_handler.set_content(content_list=[
+            *self.__xlsx_header_row_list,
+            *self.__xlsx_content_row_list
+        ])
+
+        # 格式化xlsx结果单元格颜色
+        self.__xlsx_file_handler.format_sheet_cel_success(xlsx_format_options=[
+            XlsxFormatCelSuccessOption(
+                format_key_name="跑批结果是否符合预期",
+                is_success_fn=lambda cell_value: cell_value is True,
+                start_index=self.__content_row_start_index + 1
+            ),
+            XlsxFormatCelSuccessOption(
+                format_key_name="跑批是否成功",
+                is_success_fn=lambda cell_value: cell_value is True,
+                start_index=self.__content_row_start_index + 1
+            )
+        ])
+
+    def _get_api_request_task_list(self) -> list[ApiRequestTask]:
         api_request_task_list: list[ApiRequestTask] = [
             ApiRequestTask(
                 api_param=self.__create_api_task_params_fn(
                     data_row=row_data,
-                    header_row=(xlsx_header_row_list)
+                    header_row=(self.__xlsx_header_row_list)
                 ),
-                origin_data=row_data
+                origin_data=row_data,
+                task_is_success=self.get_task_is_success(row_data, self.__xlsx_header_row_list)
             )
-            for row_index, row_data in enumerate(xlsx_content_row_list)
+            for row_index, row_data in enumerate(self.__xlsx_content_row_list)
         ]
         return api_request_task_list
 
@@ -171,7 +202,7 @@ class XlsxHttpBatchHandler:
                 formatted_list.append(cell)
         return formatted_list
 
-    def __reader_xlsx_data(self) -> list:
+    def __reader_xlsx_data(self):
         '''读取xlsx文件数据'''
         # 1：确认要读取的sheet
         if self.__sheet_name:
@@ -192,42 +223,51 @@ class XlsxHttpBatchHandler:
         if self.__content_row_start_index:
             xlsx_header_row = xlsx_data[0:self.__content_row_start_index]
             xlsx_content_rows = xlsx_data[self.__content_row_start_index:]
-        return [deepcopy(xlsx_header_row), deepcopy(xlsx_content_rows)]
+        self.__xlsx_header_row_list = deepcopy(xlsx_header_row)
+        self.__xlsx_content_row_list = deepcopy(xlsx_content_rows)
 
-    def _format_result_to_header(self, header_row: list) -> list:
+    def _format_result_to_header(self):
+        header_row = self.__xlsx_header_row_list
         ''' 在标题行中添加结果列 '''
-        # 只在内容行从第一行开始的情况下，添加结果列
-        if self.__content_row_start_index == 1:
-            # 复制 原始标题行
-            # 判断是否已经添加过结果列，避免重复添加
-            h_0: AppendHeaderType = self.__append_header[0]
-            is_not_includes = h_0['label'] not in header_row[0]
-            if is_not_includes:
-                append_header_row = [h['label'] for h in self.__append_header]
-                header_row[0] = [*header_row[0], *append_header_row]
-            return header_row
-        else:
-            return header_row
+        h_0: AppendHeaderType = self.__append_header[0]
+        is_includes = h_0['label'] in header_row[0]
+        # 避免重复添加
+        if not is_includes:
+            append_header_row = [h['label'] for h in self.__append_header]
+            header_row[0] = [*header_row[0], *append_header_row]
+        return header_row
 
-    def _format_result_to_content(self,
-                                  header_row: list,
-                                  content_row_chunk: list,
-                                  task_chunk: list[ApiRequestTask]
-                                  ) -> list:
+    def _format_result_to_content(self, task: ApiRequestTask, row_data: list):
         '''在内容行中添加结果列'''
-        for task_index, task in enumerate(task_chunk):
-            # 复制 原始数据列
-            content_row = content_row_chunk[task_index]
-            # 根据header头顺序，添加 结果列
-            for h in self.__append_header:
-                # 获取当前h的索引
-                idx = header_row[0].index(h['label'])
-                append_value = task[h['key']]
-                # 如果是dict or list类型，转换成字符串
-                if isinstance(append_value, dict) or isinstance(append_value, list):
-                    append_value = str(append_value)
-                if len(content_row) < len(header_row[0]):
-                    content_row.append(append_value)
-                else:
-                    content_row[len(header_row) - len(self.__append_header) + idx] = append_value
-        return content_row_chunk
+        header_row: list = self.__xlsx_header_row_list
+        # 根据header头顺序，添加 结果列
+        for h in self.__append_header:
+            # 获取当前h的索引
+            idx = header_row[0].index(h['label'])
+            append_value = task[h['key']]
+            # 如果是dict or list类型，转换成字符串
+            if isinstance(append_value, dict) or isinstance(append_value, list):
+                append_value = str(append_value)
+
+            if len(row_data) < len(header_row[0]):
+                row_data.append(append_value)
+            else:
+                row_data[idx] = append_value
+
+    def get_cell_value_by_header_name(self, row_data: list, header_name: str) -> Any:
+        '''根据标题名称获取行数据对应的值'''
+        try:
+            header_row: list = self.__xlsx_header_row_list
+            header_index = header_row[0].index(header_name)
+            if header_index >= len(row_data):
+                return None
+            return row_data[header_index]
+        except ValueError:
+            return None
+
+    def get_task_is_success(self, row_data: list, header_row: list) -> bool:
+        '''根据行数据获取任务是否成功'''
+        return self.get_cell_value_by_header_name(
+            row_data=row_data,
+            header_name="跑批是否成功",
+        )

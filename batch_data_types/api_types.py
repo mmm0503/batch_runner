@@ -24,16 +24,10 @@ class ApiRequestTask:  # api_request_task
     format_data: Optional[Any] = None  # 格式化后的结果
     format_data_is_success: bool = None  # 格式化后，判断res是符合预期
 
+    task_is_success: bool = False  # 任务是否成功完成
+
     def __getitem__(self, key):
         try:
             return getattr(self, key)
         except AttributeError:
             raise KeyError(key)
-
-# # 批量请求任务的 入参类型
-# @dataclass
-# class ApiBatchTask:  # api_batch_task
-#     api_request_task_list: list[ApiRequestTask]  # 请求类型列表
-#     concurrency: int = 1  # 并发数
-#     sleep_time: int = 2.0  # 每次请求间隔时间，单位秒
-#     complete_callback: Optional[Callable] = None

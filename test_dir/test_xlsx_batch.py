@@ -30,16 +30,18 @@ def format_res_fn(api_request_task: ApiRequestTask):
         api_request_task.format_data = json.dumps(res.get("data"))
         quota_value = res.get("data", {}).get("quotaValue", "")
         api_request_task.format_data_is_success = quota_value > 5
+        api_request_task.task_is_success = api_request_task.format_data_is_success
     except Exception as e:
         print(e)
         api_request_task.format_data = None
         api_request_task.format_data_is_success = False
+        api_request_task.task_is_success = False
 
 
 async def main():
+    # write_file_path="example_workbook_result.xlsx",
     xlsx_batch_handler = XlsxHttpBatchHandler(
         file_path="example_workbook.xlsx",
-        write_file_path="example_workbook_result.xlsx",
         create_api_task_params_fn=create_api_task_params_fn,
         format_res_fn=format_res_fn,
         concurrency=3,
