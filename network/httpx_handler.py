@@ -28,11 +28,15 @@ class HttpxHandler:
             - time_cost: 请求耗时
         '''
         try:
+            # 如果任务已经成功，则不再发送请求
             if api_request_task.task_is_success:
-                return  # 如果任务已经成功，则不再发送请求
+                return
+
+            print(api_request_task.api_param.json)
             res = None
             start_time = time.time()
             methods = api_request_task.api_param.methods.upper()
+            is_stream = api_request_task.api_param.is_stream
             match methods:
                 case "GET":
                     res = await self.async_client.get(
@@ -45,17 +49,36 @@ class HttpxHandler:
                     # json 和 data 只能传一个,否则会报错
                     if api_request_task.api_param.data and api_request_task.api_param.json:
                         raise ValueError("POST请求中，json和data参数只能传一个")
-                    res = await self.async_client.post(
-                        url=api_request_task.api_param.full_url,
-                        params=api_request_task.api_param.params,
-                        headers=api_request_task.api_param.headers,
-                        json=api_request_task.api_param.json,
-                        data=api_request_task.api_param.data,
-                        timeout=api_request_task.api_param.timeout
-                    )
+
+                    if is_stream:
+                        async with self.async_client.stream(
+                                method="POST",
+                                url=api_request_task.api_param.full_url,
+                                params=api_request_task.api_param.params,
+                                headers=api_request_task.api_param.headers,
+                                json=api_request_task.api_param.json,
+                                data=api_request_task.api_param.data,
+                                timeout=api_request_task.api_param.timeout
+                        ) as response:
+                            chunks = []
+                            async for chunk in response.aiter_bytes():
+                                chunks.append(chunk)
+                            res = b"".join(chunks)
+                    else:
+                        res = await self.async_client.post(
+                            url=api_request_task.api_param.full_url,
+                            params=api_request_task.api_param.params,
+                            headers=api_request_task.api_param.headers,
+                            json=api_request_task.api_param.json,
+                            data=api_request_task.api_param.data,
+                            timeout=api_request_task.api_param.timeout
+                        )
             end_time = time.time()
             api_request_task.time_cost = end_time - start_time  # 计算接口总耗时
-            api_request_task.res = res.json()  # 保存响应结果
+            if is_stream:
+                api_request_task.res = res.decode("utf-8")  # 保存响应结果
+            else:
+                api_request_task.res = res.json()  # 保存响应结果
         except Exception as e:
             print("HTTP请求异常：", e)
 

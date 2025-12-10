@@ -11,6 +11,7 @@ class ApiRequestParams:  # api_request_params
     data: Optional[Any] = None
     json: Optional[Any] = None
     timeout: Optional[float] = 10.0
+    is_stream: bool = False  # 是否为流式请求
 
 
 @dataclass

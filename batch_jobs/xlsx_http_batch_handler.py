@@ -21,6 +21,7 @@ class XlsxHttpBatchHandler:
     '''
     Xlsx跑批类
     '''
+    __max_size = -1
     # xlsx文件路径
     __file_path: str
     # 写入结果的xlsx文件路径，默认覆盖原文件
@@ -62,6 +63,8 @@ class XlsxHttpBatchHandler:
                  sheet_name: str = None,
                  # 内容行起始索引，默认第一行是标题行，内容从第二行开始
                  content_row_start_index: int = 1,
+                 # 先跑n行试试水，默认-1 = 全部跑
+                 max_size=-1,
                  # 并发数
                  concurrency: int = 1,
                  # 每次请求间隔时间，单位秒
@@ -75,6 +78,7 @@ class XlsxHttpBatchHandler:
         self.__write_file_path = write_file_path or file_path
         self.__sheet_name = sheet_name
         self.__content_row_start_index = content_row_start_index
+        self.__max_size = max_size
         self.__create_api_task_params_fn = create_api_task_params_fn
         self.__format_res_fn = format_res_fn or self.__default_format_res_fn
         self.__concurrency = concurrency
@@ -139,7 +143,9 @@ class XlsxHttpBatchHandler:
         # 成功行数
         success_rows = 0
         for row_data in self.__xlsx_content_row_list:
-            is_success = self.get_cell_value_by_header_name(row_data=row_data, header_name="跑批是否成功", )
+            batch_is_success = self.get_cell_value_by_header_name(row_data=row_data, header_name="跑批是否成功", )
+            format_is_success = self.get_cell_value_by_header_name(row_data=row_data, header_name="跑批结果是否符合预期", )
+            is_success = batch_is_success is True and format_is_success is True
             if is_success:
                 success_rows += 1
         success_rate = (success_rows / total_rows) * 100 if total_rows > 0 else 0
@@ -267,7 +273,12 @@ class XlsxHttpBatchHandler:
 
     def get_task_is_success(self, row_data: list, header_row: list) -> bool:
         '''根据行数据获取任务是否成功'''
-        return self.get_cell_value_by_header_name(
+        batch_is_success = self.get_cell_value_by_header_name(
             row_data=row_data,
             header_name="跑批是否成功",
         )
+        format_is_success = self.get_cell_value_by_header_name(
+            row_data=row_data,
+            header_name="跑批结果是否符合预期",
+        )
+        return batch_is_success is True and format_is_success is True
