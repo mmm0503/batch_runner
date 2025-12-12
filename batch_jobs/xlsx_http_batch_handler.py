@@ -29,6 +29,8 @@ class XlsxHttpBatchHandler:
     # 工作表名称，默认第一个工作表
     __sheet_name: Optional[str] = None
     __xlsx_file_handler: XlsxFileHandler
+    # 如果n>1，表示：重复请求n次，计算平均耗时
+    __n_time_cost: int = 1
 
     # 内容行起始索引，默认第一行是标题行，内容从第二行开始
     __content_row_start_index: int = 1
@@ -65,6 +67,8 @@ class XlsxHttpBatchHandler:
                  content_row_start_index: int = 1,
                  # 先跑n行试试水，默认-1 = 全部跑
                  max_size=-1,
+                 # # 如果n>1，表示：重复请求n次，计算平均耗时
+                 n_time_cost: int = 1,
                  # 并发数
                  concurrency: int = 1,
                  # 每次请求间隔时间，单位秒
@@ -83,56 +87,53 @@ class XlsxHttpBatchHandler:
         self.__format_res_fn = format_res_fn or self.__default_format_res_fn
         self.__concurrency = concurrency
         self.__sleep_time = sleep_time
+        self.__n_time_cost = n_time_cost
         # 初始化xlsx文件处理类
         self.__xlsx_file_handler = XlsxFileHandler(self.__file_path)
 
-    def __default_format_res_fn(self):
-        '''默认格式化接口返回结果函数'''
-        pass
+        if n_time_cost > 1:
+            self.__append_header.append({"label": f"{n_time_cost}次跑批请求耗时（秒）", "key": "n_time_cost"})
+
+        def __default_format_res_fn(self):
+            '''默认格式化接口返回结果函数'''
+            pass
 
     async def batch_run(self):
         '''开始跑批'''
-
         # 1: 读取xlsx文件，获取原始数据列表
         self.__reader_xlsx_data()
-
         # 2: 请求前处理
         # 追加 标题列
         self._format_result_to_header()
-
         # 构建请求任务列表
         api_request_task_list = self._get_api_request_task_list()
-
         # 并发切片列表
         task_chunk_list = list(chunked(api_request_task_list, self.__concurrency))
         # 并发切片content
         content_chunk_list = list(chunked(self.__xlsx_content_row_list, self.__concurrency))
         # 切片后的请求总数
         total_count = len(task_chunk_list)
-
         # 初始化httpx处理类
         httpx_handler = HttpxHandler()
         # 3: 切片并发处理请求
         for task_chunk_index, task_chunk in enumerate(task_chunk_list):
             # 构建协程列表并执行
-            await httpx_handler.async_send_api_task_list(task_chunk)
-
+            if self.__n_time_cost <= 1:
+                await httpx_handler.async_send_api_task_list(task_chunk)
+            else:
+                await httpx_handler.async_send_api_task_list_n(task_chunk)
             # 4: 请求后处理
             for task_index, task in enumerate(task_chunk):
                 row_data = content_chunk_list[task_chunk_index][task_index]
                 self.post_processing_task(task=task, row_data=row_data)
-
             # 5 xlsx处理
             self.post_processing_xlsx()
-
             # 5: 每跑一次，保存一次
             self.__xlsx_file_handler.write_handle(self.__write_file_path)
-
             # 每次请求间隔时间, 单位秒
             await asyncio.sleep(self.__sleep_time)
             # 进度打印
             print(f"并发量：{self.__concurrency}, 第 {task_chunk_index} / {total_count - 1} 批次请求处理完....")
-
         print("跑批结束")
         self.show_success_rate()
 
@@ -144,7 +145,8 @@ class XlsxHttpBatchHandler:
         success_rows = 0
         for row_data in self.__xlsx_content_row_list:
             batch_is_success = self.get_cell_value_by_header_name(row_data=row_data, header_name="跑批是否成功", )
-            format_is_success = self.get_cell_value_by_header_name(row_data=row_data, header_name="跑批结果是否符合预期", )
+            format_is_success = self.get_cell_value_by_header_name(row_data=row_data,
+                                                                   header_name="跑批结果是否符合预期", )
             is_success = batch_is_success is True and format_is_success is True
             if is_success:
                 success_rows += 1
@@ -156,10 +158,8 @@ class XlsxHttpBatchHandler:
         # 如果任务已经成功，跳过格式化
         if task.task_is_success:
             return
-
         # 格式化接口返回结果
         self.__format_res_fn(task)
-
         # 追加 结果列
         self._format_result_to_content(task=task, row_data=row_data)
 
@@ -169,7 +169,6 @@ class XlsxHttpBatchHandler:
             *self.__xlsx_header_row_list,
             *self.__xlsx_content_row_list
         ])
-
         # 格式化xlsx结果单元格颜色
         self.__xlsx_file_handler.format_sheet_cel_success(xlsx_format_options=[
             XlsxFormatCelSuccessOption(
@@ -192,7 +191,8 @@ class XlsxHttpBatchHandler:
                     header_row=(self.__xlsx_header_row_list)
                 ),
                 origin_data=row_data,
-                task_is_success=self.get_task_is_success(row_data, self.__xlsx_header_row_list)
+                task_is_success=self.get_task_is_success(row_data, self.__xlsx_header_row_list),
+                n_time_cost=self.__n_time_cost,
             )
             for row_index, row_data in enumerate(self.__xlsx_content_row_list)
         ]
@@ -218,7 +218,6 @@ class XlsxHttpBatchHandler:
             sheet_names = self.__xlsx_file_handler.get_sheet_names()
             if sheet_names:
                 self.__xlsx_file_handler.change_sheet(sheet_names[0])
-
         # 2：读取xlsx数据
         xlsx_data = self.__xlsx_file_handler.read_handle()
         # 3：分离标题行和内容行
@@ -254,7 +253,6 @@ class XlsxHttpBatchHandler:
             # 如果是dict or list类型，转换成字符串
             if isinstance(append_value, dict) or isinstance(append_value, list):
                 append_value = str(append_value)
-
             if len(row_data) < len(header_row[0]):
                 row_data.append(append_value)
             else:

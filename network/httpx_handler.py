@@ -78,7 +78,7 @@ class HttpxHandler:
             if is_stream:
                 api_request_task.res = res.decode("utf-8")  # 保存响应结果
             else:
-                api_request_task.res = res.json()  # 保存响应结果
+                api_request_task.res = res  # 保存响应结果
         except Exception as e:
             print("HTTP请求异常：", e)
 
@@ -91,3 +91,17 @@ class HttpxHandler:
             for api_request_task in api_request_task_list
         ]
         await asyncio.gather(*async_api_tasks)
+
+    async def async_send_api_task_list_n(self, api_request_task_list: list[ApiRequestTask]):
+        '''批量发送异步请求，支持n次请求取平均耗时'''
+        for api_request_task in api_request_task_list:
+            n = api_request_task.n_time_cost
+            if n <= 1:
+                continue
+
+            total_time_cost = 0.0
+            for _ in range(n):
+                await self.async_send_api_task(api_request_task)
+                total_time_cost += api_request_task.time_cost
+
+            api_request_task.n_time_cost = total_time_cost / n

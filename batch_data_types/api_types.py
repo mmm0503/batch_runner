@@ -19,6 +19,7 @@ class ApiRequestTask:  # api_request_task
     api_param: ApiRequestParams  # 请求参数
     origin_data: Optional[Any]  # 原始数据
 
+    n_time_cost: int = 1  # 如果n>1，表示：重复请求n次，计算平均耗时
     time_cost: Optional[float] = None  # 请求耗时
     res: Optional[Any] = None  # 请求结果
 
